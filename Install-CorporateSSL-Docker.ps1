@@ -182,6 +182,45 @@ function Test-ConfigurationSummary {
             Write-ColorLog "Environment setup: [FAIL] Not configured in bashrc" -Level "WARNING" -Color Yellow
         }
         
+        # Test Docker test scripts (standalone commands)
+        Write-ColorLog "Testing Docker test scripts..." -Level "PROGRESS" -Color Yellow
+        
+        $googleScriptTest = wsl bash -c "test -x /usr/local/bin/docker-test-google && /usr/local/bin/docker-test-google 2>/dev/null || echo 'google.com: MISSING'"
+        $githubScriptTest = wsl bash -c "test -x /usr/local/bin/docker-test-github && /usr/local/bin/docker-test-github 2>/dev/null || echo 'github.com: MISSING'"
+        
+        if ($googleScriptTest -like "*301*") {
+            Write-ColorLog "docker-test-google script: [OK] HTTP 301" -Level "SUCCESS" -Color Green
+        } else {
+            Write-ColorLog "docker-test-google script: [WARNING] $googleScriptTest" -Level "WARNING" -Color Yellow
+        }
+        
+        if ($githubScriptTest -like "*200*") {
+            Write-ColorLog "docker-test-github script: [OK] HTTP 200" -Level "SUCCESS" -Color Green
+        } else {
+            Write-ColorLog "docker-test-github script: [WARNING] $githubScriptTest" -Level "WARNING" -Color Yellow
+        }
+        
+        # Test the comprehensive test script
+        $allTestScript = wsl bash -c "test -x /usr/local/bin/test-docker-all && echo 'exists' || echo 'missing'"
+        if ($allTestScript -eq "exists") {
+            Write-ColorLog "test-docker-all script: [OK] Installed" -Level "SUCCESS" -Color Green
+        } else {
+            Write-ColorLog "test-docker-all script: [WARNING] Not installed" -Level "WARNING" -Color Yellow
+        }
+        
+        # Test direct commands that should always work
+        Write-ColorLog "Testing direct Docker commands..." -Level "PROGRESS" -Color Yellow
+        
+        $directCorpTest = wsl bash -c "timeout 10 /usr/local/bin/docker-corp run --rm curlimages/curl:latest curl -s -o /dev/null -w '%{http_code}' https://google.com 2>/dev/null || echo '000'"
+        $directCorpStatus = if ($directCorpTest -match '^\d{3}$') { [int]$directCorpTest } else { 0 }
+        $directCorpSuccess = $directCorpStatus -ge 200 -and $directCorpStatus -lt 400
+        
+        if ($directCorpSuccess) {
+            Write-ColorLog "Direct docker-corp: [OK] HTTP $directCorpStatus" -Level "SUCCESS" -Color Green
+        } else {
+            Write-ColorLog "Direct docker-corp: [FAIL] HTTP $directCorpStatus" -Level "ERROR" -Color Red
+        }
+        
         # Summary
         Write-ColorLog "Configuration Summary:" -Level "TITLE" -Color Magenta
         Write-ColorLog "- Registry certificates: $registryCount" -Level "INFO"
@@ -196,6 +235,8 @@ function Test-ConfigurationSummary {
             GoogleTest = $googleSuccess
             GitHubTest = $githubSuccess
             EnvironmentSetup = ($envSetup -eq "configured")
+            DirectCorpTest = $directCorpSuccess
+            DirectCorpStatus = $directCorpStatus
         }
     }
     catch {
@@ -418,6 +459,25 @@ function Install-DockerSSLConfiguration {
         
         $dockerEnvWSLPath = wsl wslpath "'$dockerEnvScript'"
         wsl bash -c "cp '$dockerEnvWSLPath' ~/.docker/docker-corporate-env.sh && chmod +x ~/.docker/docker-corporate-env.sh" 2>$null
+        
+        # Step 6: Install Docker test scripts
+        Write-ColorLog "Installing Docker test scripts..." -Level "PROGRESS" -Color Yellow
+        
+        $testScriptDir = Join-Path $PSScriptRoot "docker-test-scripts"
+        if (Test-Path $testScriptDir) {
+            $testScriptDirWSL = wsl wslpath "'$testScriptDir'"
+            wsl bash -c "sudo mkdir -p /usr/local/bin/docker-tests" 2>$null
+            wsl bash -c "sudo cp '$testScriptDirWSL'/*.sh /usr/local/bin/docker-tests/ && sudo chmod +x /usr/local/bin/docker-tests/*.sh" 2>$null
+            
+            # Create convenient symlinks
+            wsl bash -c "sudo ln -sf /usr/local/bin/docker-tests/docker-test-google.sh /usr/local/bin/docker-test-google" 2>$null
+            wsl bash -c "sudo ln -sf /usr/local/bin/docker-tests/docker-test-github.sh /usr/local/bin/docker-test-github" 2>$null
+            wsl bash -c "sudo ln -sf /usr/local/bin/docker-tests/test-docker-all.sh /usr/local/bin/test-docker-all" 2>$null
+            
+            Write-ColorLog "Installed Docker test scripts: docker-test-google, docker-test-github, test-docker-all" -Level "SUCCESS" -Color Green
+        } else {
+            Write-ColorLog "Docker test scripts directory not found - creating basic aliases only" -Level "WARNING" -Color Yellow
+        }
         
         # Add to bashrc
         wsl bash -c "grep -q 'docker-corporate-env.sh' ~/.bashrc || echo 'source ~/.docker/docker-corporate-env.sh 2>/dev/null' >> ~/.bashrc" 2>$null
