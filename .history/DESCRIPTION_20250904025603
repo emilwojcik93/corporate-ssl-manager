@@ -1,3 +1,0 @@
-Corporate SSL Certificate Manager for WSL and Node.js
-
-Automatically identifies, tests, and installs corporate SSL certificates to resolve SSL inspection issues in development environments. Supports 25+ WSL distributions and Node.js with intelligent certificate discovery, systematic testing, and minimal installation approach.

@@ -168,19 +168,45 @@ function Test-WSLAvailability {
     }
     
     try {
-        $wslOutput = wsl -l -q 2>$null
-        if ($wslOutput) {
-            $wslList = $wslOutput | Where-Object { $_ -and $_.ToString().Trim() -ne "" } | ForEach-Object { $_.ToString().Trim() }
-            if ($wslList) {
-                Write-Log "Available WSL distributions: $($wslList -join ', ')" "INFO"
-                return $wslList
+        # Use registry-based detection instead of parsing wsl command output
+        $wslDistros = @()
+        
+        # Check WSL registry entries
+        $wslRegPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss"
+        if (Test-Path $wslRegPath) {
+            $lxssEntries = Get-ChildItem $wslRegPath -ErrorAction SilentlyContinue
+            foreach ($entry in $lxssEntries) {
+                $distroName = Get-ItemProperty $entry.PSPath -Name "DistributionName" -ErrorAction SilentlyContinue
+                if ($distroName -and $distroName.DistributionName) {
+                    $wslDistros += $distroName.DistributionName
+                }
             }
+        }
+        
+        # Fallback: Try to get distribution names from wsl command if registry fails
+        if ($wslDistros.Count -eq 0) {
+            $wslTest = wsl bash -c "echo 'test'" 2>$null
+            if ($wslTest -eq "test") {
+                # WSL is working, try to detect distribution
+                $distroInfo = wsl bash -c "lsb_release -i 2>/dev/null | cut -f2" 2>$null
+                if ($distroInfo) {
+                    $wslDistros += $distroInfo.Trim()
+                } else {
+                    # Final fallback - assume Ubuntu
+                    $wslDistros += "Ubuntu"
+                }
+            }
+        }
+        
+        if ($wslDistros.Count -gt 0) {
+            Write-Log "Available WSL distributions: $($wslDistros -join ', ')" "INFO"
+            return $wslDistros
         }
         
         throw "No WSL distributions found"
     }
     catch {
-        throw "Failed to list WSL distributions: $($_.Exception.Message)"
+        throw "Failed to detect WSL distributions: $($_.Exception.Message)"
     }
 }
 
@@ -189,24 +215,29 @@ function Get-DefaultWSLDistro {
     
     Write-Log "Detecting default WSL distribution..." "PROGRESS"
     
-    # Try to get the default distribution
+    # Try to get the default distribution from registry
     try {
-        $wslOutput = wsl -l -q 2>$null
-        if ($wslOutput) {
-            $wslList = $wslOutput | Where-Object { $_ -and $_.ToString().Trim() -ne "" }
-            if ($wslList) {
-                $defaultDistro = $wslList[0].ToString().Trim()
-                Write-Log "Default WSL distribution detected: $defaultDistro" "SUCCESS"
-                return $defaultDistro
+        $wslRegPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss"
+        if (Test-Path $wslRegPath) {
+            $defaultGuid = Get-ItemProperty $wslRegPath -Name "DefaultDistribution" -ErrorAction SilentlyContinue
+            if ($defaultGuid -and $defaultGuid.DefaultDistribution) {
+                $defaultRegPath = Join-Path $wslRegPath $defaultGuid.DefaultDistribution
+                if (Test-Path $defaultRegPath) {
+                    $distroName = Get-ItemProperty $defaultRegPath -Name "DistributionName" -ErrorAction SilentlyContinue
+                    if ($distroName -and $distroName.DistributionName) {
+                        Write-Log "Default WSL distribution detected: $($distroName.DistributionName)" "SUCCESS"
+                        return $distroName.DistributionName
+                    }
+                }
             }
         }
     }
     catch {
-        Write-Log "Could not detect default WSL distribution" "WARNING"
+        Write-Log "Could not detect default WSL distribution from registry" "WARNING"
     }
     
     # Fallback to first available distribution
-    if ($AvailableDistros) {
+    if ($AvailableDistros -and $AvailableDistros.Count -gt 0) {
         $fallback = $AvailableDistros[0].ToString().Trim()
         Write-Log "Using first available distribution: $fallback" "INFO"
         return $fallback

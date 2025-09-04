@@ -117,6 +117,9 @@ test-output/
 *.swo
 *~
 
+# History files (IDE file history)
+.history/
+
 # Windows specific
 desktop.ini
 $RECYCLE.BIN/
