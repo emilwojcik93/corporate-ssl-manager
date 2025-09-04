@@ -1,0 +1,46 @@
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# PowerShell files
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# JavaScript files
+*.js text eol=lf
+*.json text eol=lf
+
+# Markdown files
+*.md text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Configuration files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini text eol=crlf
+
+# Certificate files (binary)
+*.crt binary
+*.pem binary
+*.p12 binary
+*.pfx binary
+*.cer binary
+*.der binary
+
+# Archive files
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+
+# Image files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
